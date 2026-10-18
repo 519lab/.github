@@ -1,0 +1,138 @@
+name: promote
+
+# Reusable develop → main promotion. Opens one develop → main pull request and
+# refreshes its summary when develop moves again before it is merged; closes it
+# when develop is no longer ahead of main. Callers decide when it runs (normally
+# after their CI passes on a develop push) and must grant
+# contents: read and pull-requests: write.
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: Commit CI passed on. Defaults to the triggering commit.
+        type: string
+        default: ""
+      merge-note:
+        description: Repo-specific line for the PR body, e.g. what merging to main deploys.
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  pull-request:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The commit CI passed on, not whatever develop points at now.
+          ref: ${{ inputs.ref || github.sha }}
+          fetch-depth: 0
+
+      - name: Open or update the promotion pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MERGE_NOTE: ${{ inputs.merge-note }}
+        run: |
+          set -euo pipefail
+
+          git fetch --no-tags origin main
+
+          ahead=$(git rev-list --count origin/main..HEAD)
+          # Same-repo pull requests match --head develop. owner:branch matches a fork only,
+          # and that miss is what made the second push try to open a duplicate.
+          find_pr() {
+            gh pr list \
+              --repo "$GITHUB_REPOSITORY" \
+              --base main \
+              --head develop \
+              --state open \
+              --json number,isCrossRepository \
+              --jq 'first(.[] | select(.isCrossRepository | not) | .number) // empty'
+          }
+          existing=$(find_pr)
+
+          if [ "$ahead" -eq 0 ]; then
+            if [ -n "$existing" ]; then
+              gh pr close "$existing" \
+                --repo "$GITHUB_REPOSITORY" \
+                --comment "develop has no commits that main does not already contain, so this promotion pull request is closed."
+              echo "Closed #$existing; develop is not ahead of main."
+            else
+              echo "develop is not ahead of main; nothing to promote."
+            fi
+            exit 0
+          fi
+
+          body_file=$(mktemp)
+          {
+            echo "Merging this pull request promotes \`develop\` onto \`main\`."
+            echo
+            if [ -n "$MERGE_NOTE" ]; then
+              printf '%s\n\n' "$MERGE_NOTE"
+            fi
+            echo "Use a merge commit. A rebase would leave \`develop\` looking unmerged."
+            echo
+            echo "## Commits"
+            echo
+            limit=50
+            count=0
+            while IFS= read -r line; do
+              count=$((count + 1))
+              if [ "$count" -le "$limit" ]; then
+                printf '%s\n' "$line"
+              fi
+            done < <(git log --reverse --pretty=tformat:'- %s (%h)' origin/main..HEAD)
+            if [ "$count" -gt "$limit" ]; then
+              echo
+              echo "... and $((count - limit)) more"
+            fi
+            echo
+            echo "## Files"
+            echo
+            echo '```'
+            git diff --stat origin/main...HEAD
+            echo '```'
+            echo
+            echo "Maintained by the shared \`ggrace519/.github\` promote workflow. A later push to \`develop\` updates this description; notes left in the description are replaced, so put them in a comment."
+          } > "$body_file"
+
+          title="Promote develop to main"
+          update_pr() {
+            # REST, not gh pr edit: that command queries Projects (classic) and fails
+            # once GitHub returns the deprecation error.
+            jq -n --rawfile body "$body_file" --arg title "$title" '{title: $title, body: $body}' \
+              | gh api --method PATCH "repos/${GITHUB_REPOSITORY}/pulls/$1" --input - --jq .html_url
+            echo "Updated #$1"
+          }
+          if [ -n "$existing" ]; then
+            update_pr "$existing"
+            exit 0
+          fi
+
+          create_log=$(mktemp)
+          if gh pr create \
+            --repo "$GITHUB_REPOSITORY" \
+            --base main \
+            --head develop \
+            --title "$title" \
+            --body-file "$body_file" \
+            >"$create_log" 2>&1; then
+            cat "$create_log"
+            exit 0
+          fi
+          cat "$create_log" >&2
+
+          existing=$(find_pr)
+          if [ -z "$existing" ] && grep -q 'already exists' "$create_log"; then
+            existing=$(grep -oE '/pull/[0-9]+' "$create_log" | head -n 1)
+            existing=${existing##*/}
+          fi
+          if [ -z "$existing" ]; then
+            echo "failed to create the promotion pull request" >&2
+            exit 1
+          fi
+          update_pr "$existing"
