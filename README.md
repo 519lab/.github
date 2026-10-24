@@ -32,6 +32,7 @@ jobs:
     with:
       ref: ${{ github.event.workflow_run.head_sha }}
       # merge-note: "What merging to main deploys, if anything."
+      # base: master   # promotion target; defaults to main
 ```
 
 Requirements:
