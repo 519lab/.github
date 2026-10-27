@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Added
+- `promote` takes an optional `base` input (default `main`) for repos whose promotion branch has another name, such as `master`. Existing callers are unaffected.
+
+### Docs
+- Corrected the README: CI does run on the promotion pull request. The earlier text wrongly said required checks on `main` would never report.
+
 ## [1.0.0] - 2026-10-17
 
 ### Added
