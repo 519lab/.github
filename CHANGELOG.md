@@ -4,6 +4,9 @@
 
 ## [1.1.0] - 2026-11-07
 
+### Changed
+- All workflows pin `actions/checkout` to v7.0.1 (Node 24) instead of v4.4.0. Every run on GitHub-hosted runners warned that Node 20 is deprecated and was forced onto Node 24; the pin now matches the runtime actually used.
+
 ### Added
 - A `SECURITY.md` with the default security policy, so that reports have a documented path (#24).
 - Reusable `release` workflow for repositories that keep a changelog and semantic versions. On every push to `main` it tags the changelog's top `## [X.Y.Z]` version and publishes a GitHub release with that section as the notes, so releases stop being cut by hand and the notes match the changelog. `dry-run` validates the changelog on the promotion pull request, and `major-tag` moves `vX`. Callers get `version`, `tag`, `released` and `url` outputs to chain tag-triggered builds, because tags made with `GITHUB_TOKEN` start no workflows.
