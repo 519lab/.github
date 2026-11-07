@@ -1,0 +1,28 @@
+name: self-release
+
+# This repository's own release: tag and publish the changelog's top version on
+# every push to main, and validate the changelog on the promotion pull request.
+# It calls the reusable workflow from the same commit, so a change to
+# release.yml is exercised here first.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    uses: ./.github/workflows/release.yml
+    with:
+      dry-run: ${{ github.event_name == 'pull_request' }}
+      # Moving v1 is an update. The protect-release-tags ruleset excludes the major
+      # tag (refs/tags/v[0-9]*) so that GITHUB_TOKEN may move it; see README.
+      major-tag: true
