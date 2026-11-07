@@ -45,7 +45,7 @@ Requirements:
 - The default branch must be `develop`. `workflow_run` only fires for workflows on the default branch.
 - Turn on Settings → Actions → "Allow GitHub Actions to create and approve pull requests":
   `gh api -X PUT repos/OWNER/REPO/actions/permissions/workflow -f default_workflow_permissions=read -F can_approve_pull_request_reviews=true`
-- CI does run on the promotion pull request. Because this workflow starts from a `workflow_run` chain, GitHub credits the `pull_request` runs to the user whose push began the chain, not to `GITHUB_TOKEN`. tetris-c #14 showed this, with `triggering_actor` set to the pushing user. Required status checks on `main` therefore report as usual.
+- The CI run fired by opening the promotion pull request is held for approval. GitHub puts `pull_request` runs on pull requests that `github-actions[bot]` created or updated into an approval-required state, whatever the fork-PR approval policy says (changelog of 2026-06-11, "Bot-created pull requests can run workflows if approved"). A new promotion pull request therefore shows no CI result until someone with write access clicks "Approve and run", or until the next push to `develop`, whose `synchronize` run is credited to the pushing user and runs on its own. In graphLM the held run later shows up as a red, zero-job "workflow file issue" failure once the pull request merges; that is the held run, not a real break (#20).
 
 Merge promotion pull requests with a merge commit, never a squash or rebase.
 
