@@ -2,7 +2,12 @@
 
 ## [Unreleased]
 
+### Added
+- Reusable `release` workflow for repositories that keep a changelog and semantic versions. On every push to `main` it tags the changelog's top `## [X.Y.Z]` version and publishes a GitHub release with that section as the notes, so releases stop being cut by hand and the notes match the changelog. `dry-run` validates the changelog on the promotion pull request, and `major-tag` moves `vX`. Callers get `version`, `tag`, `released` and `url` outputs to chain tag-triggered builds, because tags made with `GITHUB_TOKEN` start no workflows.
+- This repository releases itself with that workflow (`self-release.yml`).
+
 ### Fixed
+- The README no longer claims that CI runs on a newly opened promotion pull request. GitHub holds the `pull_request` run fired by a pull request that `github-actions[bot]` opened until someone approves it; only later pushes to `develop` run on their own. The earlier evidence (tetris-c #14) was a run after a manual approval. The README now says to approve the first run, and explains the red zero-job run that graphLM shows afterwards (#20).
 - The README's caller template no longer lets a skipped promote run cancel the real one. A develop merge also re-runs lint on the open promotion PR, and that run's promote job is skipped. In the shared concurrency group it cancelled the push-triggered run, so the promotion PR wasn't refreshed. Only push and manual runs share the group now. Existing callers have to copy the new block; nothing in `promote.yml` itself changed (#17).
 
 ### Docs
