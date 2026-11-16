@@ -42,7 +42,7 @@ roll() {
       PREFIX=v TARGET_BRANCH=develop BASE_BRANCH=main BUMP=auto DRY_RUN=false TOKEN_SOURCE=GITHUB_TOKEN \
       "$@" bash "$S/version.sh" ) > "$R/log" 2>&1
   rc=$?
-  out_version=$(sed -n 's/^version=//p' "$o"); out_sha=$(sed -n 's/^sha=//p' "$o"); out_pr=$(sed -n 's/^pull-request=//p' "$o")
+  out_version=$(sed -n 's/^version=//p' "$o"); out_sha=$(sed -n 's/^sha=//p' "$o"); out_pr=$(sed -n 's/^pull-request=//p' "$o"); out_promote=$(sed -n 's/^promote=//p' "$o")
   summary=$(cat "$s")
   git -C "$W" fetch -q --prune origin; git -C "$W" pull -q --ff-only origin develop 2>/dev/null
 }
@@ -78,7 +78,7 @@ unrel() { printf '# Changelog\n\n## [Unreleased]\n\n%s\n\n## [1.1.0] - 2026-11-0
 
 echo "patch roll opens a pull request and leaves develop alone"; mkrepo v1.0.0 v1.1.0
 new_changelog "$(unrel $'### Fixed\n- a fix')"; before=$(git -C "$W" rev-parse HEAD)
-roll; eq rc "$rc" 0; eq version "$out_version" 1.1.1; eq pull-request "$out_pr" 1; eq "sha is ref" "$out_sha" "$before"
+roll; eq rc "$rc" 0; eq version "$out_version" 1.1.1; eq pull-request "$out_pr" 1; eq promote "$out_promote" false; eq "sha is ref" "$out_sha" "$before"
 eq "develop unchanged" "$(git -C "$REMOTE" rev-parse develop)" "$before"
 eq "roll-up branch is develop plus one commit" "$(git -C "$REMOTE" rev-parse "$ROLL^")" "$before"
 if has_ref "$ROLL-staging"; then no "staging branch deleted"; else ok "staging branch deleted"; fi
@@ -106,7 +106,7 @@ eq "rebuilt on develop" "$(git -C "$REMOTE" rev-parse "$ROLL^")" "$before"
 
 echo "after the merge there is nothing to roll and the branch is retired"
 merge_roll; h=$(git -C "$W" rev-parse HEAD)
-roll; eq rc "$rc" 0; eq pull-request "$out_pr" ""; eq version "$out_version" 1.1.1; eq sha "$out_sha" "$h"
+roll; eq rc "$rc" 0; eq pull-request "$out_pr" ""; eq promote "$out_promote" true; eq version "$out_version" 1.1.1; eq sha "$out_sha" "$h"
 if has_ref "$ROLL"; then no "roll-up branch deleted"; else ok "roll-up branch deleted"; fi
 eq "merged pull request not commented" "$(pr '.[0].state + " " + (.[0].comments | length | tostring)')" "merged 0"
 
@@ -145,6 +145,20 @@ new_changelog "$(unrel $'### Fixed\n- a fix')"; roll; eq pull-request "$out_pr" 
 new_changelog "$(cl)"; roll; eq rc "$rc" 0; eq pull-request "$out_pr" ""
 eq "closed with a comment" "$(pr '.[0].state + " " + (.[0].comments | length | tostring)')" "closed 1"
 if has_ref "$ROLL"; then no "roll-up branch deleted"; else ok "roll-up branch deleted"; fi
+
+echo "a staging branch left by a cancelled run is cleaned up"; mkrepo v1.1.0
+git -C "$REMOTE" update-ref "refs/heads/$ROLL-staging" "$(git -C "$REMOTE" rev-parse develop)"
+roll; eq rc "$rc" 0; eq promote "$out_promote" true
+if has_ref "$ROLL-staging"; then no "staging deleted"; else ok "staging deleted"; fi
+
+echo "a branch that cannot be read is not taken for a missing one"; mkrepo v1.1.0
+new_changelog "$(unrel $'### Fixed\n- a fix')"; roll; merge_roll; roll STUB_REF_502="$ROLL"; eq rc "$rc" 1
+if grep -q "::error::Could not read the branch $ROLL" "$R/log"; then ok "fails loudly"; else no "error: $(cat "$R/log")"; fi
+if has_ref "$ROLL"; then ok "branch kept"; else no "branch kept"; fi
+
+echo "develop moving during the run leaves the pull request alone"; mkrepo v1.1.0
+new_changelog "$(unrel $'### Fixed\n- a fix')"; roll STUB_MOVE=1; eq rc "$rc" 0; eq pull-request "$out_pr" ""; eq promote "$out_promote" false
+if has_ref "$ROLL" || has_ref "$ROLL-staging" || [ "$(pr length)" != 0 ]; then no "nothing written"; else ok "nothing written"; fi
 
 echo "a pull request opened by another run in the meantime is adopted"; mkrepo v1.1.0
 new_changelog "$(unrel $'### Fixed\n- a fix')"; roll STUB_PR_RACE=1; eq rc "$rc" 0; eq pull-request "$out_pr" 1; eq "one pull request" "$(pr length)" 1
@@ -188,7 +202,8 @@ new_changelog "$(unrel $'### Fixed\n- x')"; roll; eq version "$out_version" 1.1.
 eq "1.1.0 section intact" "$(cl | grep -c '^## \[1.1.0\] - 2026-11-07$')" 1
 eq "old entry stays in 1.1.0" "$(cl | sed -n '/^## \[1.1.0\]/,$p' | grep -c 'old feature')" 1
 
-echo "nothing to roll"; mkrepo v1.1.0; h=$(git -C "$W" rev-parse HEAD); roll; eq rc "$rc" 0; eq pull-request "$out_pr" ""; eq sha "$out_sha" "$h"; eq version "$out_version" 1.1.0
+echo "nothing to roll"; mkrepo v1.1.0; h=$(git -C "$W" rev-parse HEAD); roll; eq rc "$rc" 0; eq pull-request "$out_pr" ""; eq promote "$out_promote" true; eq sha "$out_sha" "$h"; eq version "$out_version" 1.1.0
+roll DRY_RUN=true; eq "dry run never promotes" "$out_promote" false
 if has_ref "$ROLL"; then no "no roll-up branch"; else ok "no roll-up branch"; fi
 echo "empty category headings only"; mkrepo v1.1.0; new_changelog "$(unrel $'### Added\n\n### Fixed')"; roll; eq pull-request "$out_pr" ""
 
@@ -199,8 +214,11 @@ case $summary in *"Next release: v1.2.0"*"A minor bump from v1.1.0."*"- x"*) ok 
 
 echo "branch moved"; mkrepo v1.1.0; new_changelog "$(unrel $'### Added\n- x')"
 git clone -q -b develop "$REMOTE" "$R/other"; git -C "$R/other" commit -q --allow-empty -m later; git -C "$R/other" push -q origin develop
-h=$(git -C "$W" rev-parse HEAD); roll; eq rc "$rc" 0; eq pull-request "$out_pr" ""; eq sha "$out_sha" "$h"
+h=$(git -C "$W" rev-parse HEAD); roll; eq rc "$rc" 0; eq pull-request "$out_pr" ""; eq "superseded run does not promote" "$out_promote" false; eq sha "$out_sha" "$h"
 if grep -q 'moved on' "$R/log"; then ok notice; else no notice; fi
+echo "superseded run with nothing to roll does not promote either"; mkrepo v1.1.0
+git clone -q -b develop "$REMOTE" "$R/other"; git -C "$R/other" commit -q --allow-empty -m later; git -C "$R/other" push -q origin develop
+roll; eq rc "$rc" 0; eq promote "$out_promote" false
 if has_ref "$ROLL"; then no "no roll-up branch"; else ok "no roll-up branch"; fi
 
 echo "refused commit"; mkrepo v1.1.0; new_changelog "$(unrel $'### Added\n- x')"; roll STUB_REFUSE=1; eq rc "$rc" 1

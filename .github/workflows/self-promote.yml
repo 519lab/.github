@@ -40,8 +40,10 @@ jobs:
     if: >-
       github.event_name == 'pull_request' &&
       github.event.pull_request.head.repo.full_name == github.repository
+    # version.yml declares pull-requests: write, and a caller must grant at least that.
     permissions:
       contents: write
+      pull-requests: write
     uses: ./.github/workflows/version.yml
     with:
       dry-run: true
@@ -65,8 +67,9 @@ jobs:
 
   promote:
     needs: version
-    # A roll-up pull request is open: promote once it is merged, from the run that merge starts.
-    if: needs.version.outputs.pull-request == ''
+    # Not while a roll-up pull request is open (the run its merge starts promotes), and not
+    # for a commit that develop has moved past (the run for the newer one does).
+    if: needs.version.outputs.promote == 'true'
     permissions:
       contents: read
       pull-requests: write

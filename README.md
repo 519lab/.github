@@ -94,8 +94,8 @@ jobs:
       app-private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
   promote:
     needs: version
-    # A roll-up pull request is open: promote from the run that merging it starts.
-    if: needs.version.outputs.pull-request == ''
+    # Not while a roll-up pull request is open, nor for a commit develop has moved past.
+    if: needs.version.outputs.promote == 'true'
     permissions:
       contents: read
       pull-requests: write
@@ -107,18 +107,20 @@ jobs:
       app-private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
 ```
 
-Inputs: `ref`, `branch`, `base`, `changelog`, `tag-prefix`, `bump`, `dry-run`, `runs-on`, `app-client-id`; secret `app-private-key`. Outputs: `version`, `sha` (`ref`, the commit the run looked at) and `pull-request` (the number of the roll-up pull request the run opened or updated, empty when there was nothing to roll). Run `promote` only when `pull-request` is empty; otherwise it would promote a `develop` whose `[Unreleased]` is not rolled yet, and the `release` check on the promotion pull request would fail.
+Inputs: `ref`, `branch`, `base`, `changelog`, `tag-prefix`, `bump`, `dry-run`, `runs-on`, `app-client-id`; secret `app-private-key`. Outputs: `version`, `sha` (`ref`, the commit the run looked at), `pull-request` (the number of the roll-up pull request the run opened or updated, empty when there was nothing to roll) and `promote` (`'true'` when nothing is left to roll and `ref` is still the head of `develop`). Run `promote` only when `promote` is `'true'`. While a roll-up pull request is open it would promote a `develop` whose `[Unreleased]` is not rolled yet, and the `release` check on the promotion pull request would fail; for a commit `develop` has moved past, the run for the newer commit decides.
 
-Upgrading from v1: grant `pull-requests: write` to the `version` job, gate `promote` on `pull-request` as above, and replace the removed `token` secret and `rolled` output.
+Every caller grants the `version` job `pull-requests: write`, a `dry-run` one included: the workflow declares it, and a called workflow cannot get more than its caller grants.
+
+Upgrading from v1: grant `pull-requests: write` to the `version` job, gate `promote` on the `promote` output as above, and replace the removed `token` secret and `rolled` output.
 
 Notes:
-- The roll-up pull request comes from `chore/roll-changelog` and is titled `chore(release): roll changelog into X.Y.Z`. The workflow owns that branch: every run rebuilds it as the head of `develop` plus one roll-up commit, so do not push to it. The commit is made through the API, so GitHub signs it. Merge with a merge commit.
+- The roll-up pull request comes from `chore/roll-changelog` and is titled `chore(release): roll changelog into X.Y.Z`. The workflow owns that branch: every run rebuilds it as the head of `develop` plus one roll-up commit, so do not push to it. The commit is made through the API, so GitHub signs it. Merge it like any other pull request into `develop`.
 - When `develop` moves before the roll-up is merged, the next run rebuilds the branch and updates the same pull request, with a new version in the title if the entries now ask for one.
-- Once there is nothing left to roll, the run closes any open roll-up pull request with a comment and deletes `chore/roll-changelog`. This also removes the branch after a merge in repositories that do not delete merged branches.
+- Once there is nothing left to roll, the run closes any open roll-up pull request with a comment and deletes `chore/roll-changelog` (and a `chore/roll-changelog-staging` left by a cancelled run). This also removes the branch after a merge in repositories that do not delete merged branches.
 - Without an app, the pull request is opened with `GITHUB_TOKEN`, and its CI waits for "Approve and run" as on the promotion pull request. A branch ruleset that covers `chore/` branches refuses the commit; the run fails with an error that says so.
-- When `develop` has moved past `ref` the run writes nothing. The run for the newer commit does the roll-up.
+- When `develop` has moved past `ref`, before or during the run, the run writes nothing and `promote` is `'false'`. The run for the newer commit does the work.
 - With `dry-run: true` no branch and no pull request are written, and the next version and its section go to the run summary. This repository runs that on every pull request into `develop`.
-- `ref` must be a commit of `develop`. A manual run started from another branch fails instead of writing anything.
+- `ref` must be a commit of `develop`. A manual run for a commit that is not on `develop` fails; one for an older commit of `develop` writes nothing, as above.
 - Section headings must be `## [X.Y.Z] - YYYY-MM-DD`; a `## 1.2.0` heading without brackets fails the run. Headings inside fenced code blocks are left alone. CRLF line endings are kept.
 - Empty categories are dropped. Link reference definitions (`[1.2.0]: https://...`) are not created or updated; ones found under `[Unreleased]` move to the end of the file.
 - A promotion with no changelog entry at all is left alone and still fails the `release` check below.

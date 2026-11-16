@@ -82,8 +82,13 @@ on:
       pull-request:
         description: >-
           Number of the roll-up pull request this run opened or updated; empty when
-          there was nothing to roll. Run `promote` only when it is empty.
+          there was nothing to roll.
         value: ${{ jobs.roll.outputs.pull-request }}
+      promote:
+        description: >-
+          'true' when `ref` is the head of `branch` and nothing is left to roll: the
+          caller should run `promote` for `sha`. Never 'true' on a dry run.
+        value: ${{ jobs.roll.outputs.promote }}
 
 permissions:
   contents: write
@@ -96,6 +101,7 @@ jobs:
       version: ${{ steps.roll.outputs.version }}
       sha: ${{ steps.roll.outputs.sha }}
       pull-request: ${{ steps.roll.outputs.pull-request }}
+      promote: ${{ steps.roll.outputs.promote }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -166,11 +172,13 @@ jobs:
             awk 'NF { seen = 1 } seen { buf[++n] = $0; if (NF) last = n } END { for (i = 1; i <= last; i++) print buf[i] }'
           }
 
+          # finish <version> [<pull request>] [promote]
           finish() {
             {
               echo "version=$1"
               echo "sha=$sha"
               echo "pull-request=${2:-}"
+              echo "promote=${3:-false}"
             } >> "$GITHUB_OUTPUT"
             exit 0
           }
@@ -198,8 +206,12 @@ jobs:
             head=$(branch_head) || fail "Could not read the head of $TARGET_BRANCH."
             [ "$head" = "$sha" ] || not_head
           }
+          # A missing branch is a 404; any other failure is not taken for one.
           ref_exists() {
-            gh api "repos/$repo/git/ref/heads/$1" > /dev/null 2>&1
+            local err
+            err=$(gh api "repos/$repo/git/ref/heads/$1" 2>&1 > /dev/null) && return 0
+            [[ $err == *"HTTP 404"* ]] && return 1
+            fail "Could not read the branch $1: $err"
           }
           # Point branch $1 at commit $2, creating it when needed.
           point() {
@@ -213,10 +225,11 @@ jobs:
             gh api "repos/$repo/pulls?state=open&base=$TARGET_BRANCH&head=${repo%%/*}:$roll_branch" --jq '.[0].number // empty'
           }
           # Nothing left to roll: close the roll-up pull request and delete its branch, which
-          # is still there after a merge unless the repository deletes merged branches.
+          # is still there after a merge unless the repository deletes merged branches, and
+          # a staging branch that a cancelled run left behind. Then `ref` may be promoted.
           retire() {
-            local pr
-            [ "$DRY_RUN" != true ] || return 0
+            local pr b
+            [ "$DRY_RUN" != true ] || finish "$1"
             require_head
             pr=$(find_pr) || fail "Could not look up the roll-up pull request."
             if [ -n "$pr" ]; then
@@ -225,11 +238,13 @@ jobs:
               gh api --method PATCH "repos/$repo/pulls/$pr" -f state=closed > /dev/null
               echo "Closed the roll-up pull request #$pr."
             fi
-            if ref_exists "$roll_branch"; then
-              gh api --method DELETE "repos/$repo/git/refs/heads/$roll_branch" > /dev/null
-              echo "Deleted $roll_branch."
-            fi
-            return 0
+            for b in "$roll_branch" "$staging"; do
+              if ref_exists "$b"; then
+                gh api --method DELETE "repos/$repo/git/refs/heads/$b" > /dev/null
+                echo "Deleted $b."
+              fi
+            done
+            finish "$1" "" true
           }
 
           git fetch --quiet --force origin 'refs/tags/*:refs/tags/*'
@@ -353,8 +368,7 @@ jobs:
           [[ $top_version =~ $semver ]] && current=$top_version
           if [ "$absorbed" -eq 0 ] || { [ "$pending" = false ] && [ "$has_unreleased" = false ]; }; then
             echo "[Unreleased] has no entries; nothing to roll."
-            retire
-            finish "$current"
+            retire "$current"
           fi
 
           level="patch"
@@ -410,8 +424,7 @@ jobs:
             fi
             if [ "$has_unreleased" = false ] && [ "$version" = "$top_version" ]; then
               echo "$top_version is already rolled and [Unreleased] has no entries; nothing to roll."
-              retire
-              finish "$top_version"
+              retire "$top_version"
             fi
           fi
 
@@ -498,6 +511,13 @@ jobs:
           fi
           commit=$(cat "$out")
           [[ $commit =~ ^[0-9a-f]{40}$ ]] || fail "Unexpected answer to the roll-up commit: $commit"
+          # The staging branch was just set to $sha, so expectedHeadOid cannot tell whether
+          # $TARGET_BRANCH moved meanwhile. Check again before the pull request changes.
+          head=$(branch_head) || fail "Could not read the head of $TARGET_BRANCH."
+          if [ "$head" != "$sha" ]; then
+            gh api --method DELETE "repos/$repo/git/refs/heads/$staging" > /dev/null
+            not_head
+          fi
           point "$roll_branch" "$commit"
           gh api --method DELETE "repos/$repo/git/refs/heads/$staging" > /dev/null
 

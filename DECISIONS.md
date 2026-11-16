@@ -36,15 +36,15 @@ Under ADR-001, `version` committed the rolled changelog straight to `develop`. T
 ### Decision
 
 - `version` builds the roll-up on `chore/roll-changelog` and opens or updates one pull request from it into `develop`. Merging it is the decision to release. The branch is owned by the workflow: each run rebuilds it as the head of `develop` plus one commit, and deletes it once nothing is left to roll.
-- The commit is built on a scratch branch (`chore/roll-changelog-staging`) and the roll-up branch is moved onto it in one step. GitHub closes a pull request whose branch points at its base commit, even for a moment, so the branch is never reset to `develop` first. The same lesson is recorded in tts-gateway's release pull request script.
+- The commit is built on a scratch branch (`chore/roll-changelog-staging`) and the roll-up branch is moved onto it in one step. GitHub closes a pull request whose branch points at its base commit, even for a moment, so the branch is never reset to `develop` first. The staging branch is fresh, so `expectedHeadOid` no longer guards `develop`; the head is read again before the roll-up branch moves, and a run that `develop` overtook writes nothing.
 - The branch name is fixed rather than carrying the version. A re-roll that turns a patch into a minor would otherwise leave a stale branch and pull request behind.
-- `promote` runs only when `version` reports no roll-up pull request. Merging the roll-up is a push by a person, so lint runs on it, `version` finds the pending section with nothing to roll, and `promote` opens the promotion pull request with the rolled changelog. The existing pending-section logic needs no change.
+- `promote` runs only when `version` reports `promote: 'true'`: nothing left to roll, and `ref` still the head of `develop`. An empty `pull-request` alone would also be true for a run that `develop` overtook, which would refresh the promotion pull request from a stale commit. Merging the roll-up is a push by a person, so lint runs on it, `version` finds the pending section with nothing to roll, and `promote` opens the promotion pull request with the rolled changelog. The existing pending-section logic needs no change.
 - Both workflows take an optional GitHub App, a dedicated one with only Contents and Pull requests access. Its pull requests run checks without approval. Without it they fall back to `GITHUB_TOKEN`; a configured app that cannot mint a token fails the run, so a broken setup is not hidden by the fallback. This reverses the 2026-11-07 decision to keep the click: there are now two bot pull requests per release instead of one.
 - The rest of ADR-001 stands: the roll lands on `develop`, the version comes from the changelog categories, and the tag is created on `main`'s merge commit.
 
 ### Consequences
 
-- This is a breaking change for callers of `version`. They need `pull-requests: write`, a gate on `promote`, and the new `pull-request` output in place of `rolled`; the `token` secret is gone.
+- This is a breaking change for callers of `version`. They need `pull-requests: write`, even for a dry run, and a gate on the new `promote` output in place of `rolled`; the `token` secret is gone.
 - A release takes two merges by a person: the roll-up into `develop`, then the promotion into `main`.
 - Without the app, each roll-up pull request costs one "Approve and run" click, as promotion pull requests do.
 - A branch ruleset on `develop` that requires pull requests no longer gets in the way. A ruleset that covers `chore/` branches would.

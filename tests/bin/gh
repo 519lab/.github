@@ -5,6 +5,8 @@
 #   STUB_REFUSE=1    the commit mutation is refused
 #   STUB_REF_FAIL=1  reading a branch fails
 #   STUB_PR_RACE=1   opening a pull request fails because another run just opened it
+#   STUB_MOVE=1      the target branch gains a commit right after the roll-up commit
+#   STUB_REF_502=b   reading branch b fails with a server error
 set -euo pipefail
 [ "${1:-}" = api ] || { echo "gh stub: unexpected call: $*" >&2; exit 64; }
 shift
@@ -15,7 +17,10 @@ declare -A field=()
 input=false
 while [ $# -gt 0 ]; do
   case $1 in
-    -f|-F) field[${2%%=*}]=${2#*=}; shift 2 ;;
+    # -F sends true as a JSON boolean; GitHub refuses the string "true" for force.
+    -f) [ "${2%%=*}" != force ] || { echo "gh stub: force must be sent with -F" >&2; exit 64; }
+        field[${2%%=*}]=${2#*=}; shift 2 ;;
+    -F) field[${2%%=*}]=${2#*=}; shift 2 ;;
     --input) input=true; shift 2 ;;
     --jq) shift 2 ;;
     *) echo "gh stub: unexpected flag: $1" >&2; exit 64 ;;
@@ -48,10 +53,14 @@ case "$method $path" in
     git -C "$work" push -q origin "$branch"
     echo "gh stub: a warning on stderr must not break the caller" >&2
     git -C "$work" rev-parse HEAD
+    if [ -n "${STUB_MOVE:-}" ]; then
+      git -C "$work" fetch -q origin develop && git -C "$work" switch -q --detach origin/develop
+      git -C "$work" commit -q --allow-empty -m "merged meanwhile" && git -C "$work" push -q origin HEAD:develop
+    fi
     rm -rf "$work"
     ;;
   "GET repos/"*"/git/ref/heads/"*)
-    if [ -n "${STUB_REF_FAIL:-}" ]; then
+    if [ -n "${STUB_REF_FAIL:-}" ] || [ "${STUB_REF_502:-}" = "${path##*/git/ref/heads/}" ]; then
       echo "gh: HTTP 502" >&2
       exit 1
     fi
