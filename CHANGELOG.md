@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Changed
+- BREAKING: `version` no longer commits the rolled changelog straight to `develop`. It puts the roll-up on its own `chore/roll-changelog` branch and opens or updates a `chore(release): roll changelog into X.Y.Z` pull request into `develop`. Merging that pull request is the decision to release. The run that merge starts finds nothing left to roll, deletes the branch, and lets `promote` open the promotion pull request. Nothing reaches `develop` without a pull request any more. Callers have to change when they bump the pin: grant the `version` job `pull-requests: write`; run `promote` only when the new `pull-request` output is empty, or it promotes an unrolled `develop` and the `release` check fails; replace the removed `rolled` output and `token` secret. `sha` is now always `ref`. See the README for the new caller block.
+
+### Added
+- `version` and `promote` take an optional GitHub App (`app-client-id` input, `app-private-key` secret) and open their pull requests as that app. Checks then run on the roll-up and promotion pull requests without the "Approve and run" click that `GITHUB_TOKEN` pull requests need (#20). Without the app they use `GITHUB_TOKEN` as before; with it configured but not mintable, the run fails instead of falling back. The README describes the app's setup.
+
 ## [1.2.0] - 2026-11-14
 
 ### Added
