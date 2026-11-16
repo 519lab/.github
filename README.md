@@ -115,6 +115,7 @@ Upgrading from v1: grant `pull-requests: write` to the `version` job, gate `prom
 
 Notes:
 - The roll-up pull request comes from `chore/roll-changelog` and is titled `chore(release): roll changelog into X.Y.Z`. The workflow owns that branch: every run rebuilds it as the head of `develop` plus one roll-up commit, so do not push to it. The commit is made through the API, so GitHub signs it. Merge it like any other pull request into `develop`.
+- A feature branch that adds an entry under `[Unreleased]` can conflict in the changelog with a roll-up merged after it was cut. Resolve it by keeping the new entry under `[Unreleased]`; the next run rolls it.
 - When `develop` moves before the roll-up is merged, the next run rebuilds the branch and updates the same pull request, with a new version in the title if the entries now ask for one.
 - Once there is nothing left to roll, the run closes any open roll-up pull request with a comment and deletes `chore/roll-changelog` (and a `chore/roll-changelog-staging` left by a cancelled run). This also removes the branch after a merge in repositories that do not delete merged branches.
 - Without an app, the pull request is opened with `GITHUB_TOKEN`, and its CI waits for "Approve and run" as on the promotion pull request. A branch ruleset that covers `chore/` branches refuses the commit; the run fails with an error that says so.
