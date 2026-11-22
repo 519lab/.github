@@ -1,8 +1,8 @@
-# ggrace519/.github
+# 519lab/.github
 
-Shared reusable GitHub Actions workflows. This repo is public so that private repos can call them.
+Organization default community health files for 519lab (see README.md). Content only: no code, no tests, no workflows.
 
-- Branch model: `develop` is the default and integration branch. `main` is promoted through a PR, and releases are tagged on main. Releases also move the major tag `v1`. Release tags (`vX.Y.Z`) are protected by the `protect-release-tags` ruleset, which only admins can bypass; the major tag `v1` is excluded from it so that `self-release.yml` can move it. Known callers pin a release commit SHA (`@<sha> # vX.Y.Z`), not `@v1`. A new release does not reach them until each caller's pin is bumped. To find callers, scan every repo's `.github/workflows` across ggrace519, 519lab and tric-it2750. Code search misses private repos.
-- Lint: `actionlint` (CI: `.github/workflows/lint.yml`). On ubuntu runners actionlint also runs shellcheck over `run:` scripts, so check scripts locally with `uvx --from shellcheck-py shellcheck -s bash` when shellcheck is not installed.
-- `release.yml` is the reusable changelog-driven tag-and-release workflow; `self-release.yml` runs it for this repo on every push to `main`, and as a `dry-run` check on the promotion pull request. A promotion must therefore roll `[Unreleased]` into a dated `## [X.Y.Z]` section or that check fails. If a ruleset ever covers `v1` again, the release is still created, the run fails at the tag move, and a re-run after fixing the ruleset repairs it. The `github-actions` app cannot be a bypass actor on a user-owned repo.
-- `promote.yml` came from homelab-swarm's inline script. Keep the logic in sync here only. homelab-swarm now calls this workflow.
+- Branch model: `develop` is the default branch and the one GitHub reads the defaults from, so a change takes effect when it merges into `develop`. `main` is promoted from `develop` through a pull request.
+- Not a fork, and never a copy of `ggrace519/.github`. Shared workflows live there only. Adding its workflows here would give callers a second set of release tags to pin by mistake.
+- A file added here becomes the default for every 519lab repository that lacks its own copy. Check which repositories that is before adding one. Keep README.md's table in step with the files.
+- The repository must stay public, or GitHub stops applying the defaults.
