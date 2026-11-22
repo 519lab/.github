@@ -20,7 +20,7 @@ Report vulnerabilities privately using GitHub's built-in reporting:
 2. Click **Report a vulnerability**.
 3. Fill out the advisory form.
 
-This works from any repository in this account. If you don't see the button, see GitHub's guide: [Privately reporting a security vulnerability](https://docs.github.com/en/code-security/security-advisories/guidance-on-reporting-and-writing-information-about-vulnerabilities/privately-reporting-a-security-vulnerability).
+This works from any repository in this organization. If you don't see the button, see GitHub's guide: [Privately reporting a security vulnerability](https://docs.github.com/en/code-security/security-advisories/guidance-on-reporting-and-writing-information-about-vulnerabilities/privately-reporting-a-security-vulnerability).
 
 Please include as much of the following as you can:
 
