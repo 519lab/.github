@@ -2,6 +2,26 @@
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-11-16
+
+### Changed
+- BREAKING: `version` no longer commits the rolled changelog straight to `develop`. It puts the roll-up on its own `chore/roll-changelog` branch and opens or updates a `chore(release): roll changelog into X.Y.Z` pull request into `develop`. Merging that pull request is the decision to release. The run that merge starts finds nothing left to roll, deletes the branch, and lets `promote` open the promotion pull request. Nothing reaches `develop` without a pull request any more. Callers have to change when they bump the pin. They must grant the `version` job `pull-requests: write`, dry-run callers included. They must run `promote` only when the new `promote` output is `'true'`; otherwise it promotes an unrolled `develop` and the `release` check fails. They must also replace the removed `rolled` output and `token` secret. The new `pull-request` output names the roll-up pull request, and `sha` is now always `ref`. See the README for the new caller block.
+
+### Added
+- `version` and `promote` take an optional GitHub App (`app-client-id` input, `app-private-key` secret) and open their pull requests as that app. Checks then run on the roll-up and promotion pull requests without the "Approve and run" click that `GITHUB_TOKEN` pull requests need (#20). Without the app they use `GITHUB_TOKEN` as before; with it configured but not mintable, the run fails instead of falling back. The README describes the app's setup.
+
+## [1.2.0] - 2026-11-14
+
+### Added
+- Reusable `version` workflow. Before a promotion it works out the next semantic version from the entries under `[Unreleased]` (an entry that starts with `BREAKING` is a major bump, `### Added` a minor one, anything else a patch), rolls them into a dated version section and commits that to `develop`, so promotions no longer need a hand-edited changelog. Entries that land before the promotion is merged fold into the same version. The tag is still created on `main` by `release`. Existing callers are unaffected until they chain `version` ahead of `promote`.
+- This repository promotes itself with `version` and `promote` (`self-promote.yml`), and every pull request into `develop` reports the release it would produce.
+- Tests for the `version` and `release` scripts (`tests/version.sh`), run by the lint workflow.
+
+### Fixed
+- A manual `promote` run started from a branch other than `develop` no longer rewrites the promotion pull request from the wrong commits, or closes it when started from `main`. The run now fails and says to start it from `develop`.
+- `release` no longer cuts the release notes short at a `## [...]` line inside a fenced code block.
+- The `release` workflow's step summary and dry-run log named the previous release twice over, as `v1.0.21.0.2`. They now read `v1.0.2`. Release notes and tags were never affected.
+
 ## [1.1.0] - 2026-11-07
 
 ### Changed
