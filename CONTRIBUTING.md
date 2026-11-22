@@ -10,7 +10,7 @@ This is the default guide for every 519lab repository without its own `CONTRIBUT
 
 ## Branches
 
-- `develop` is the default branch, and every pull request targets it. `main` receives only promotion pull requests from `develop`.
+- `develop` is the default branch, and every pull request targets it. The release branch, `main` (`master` in a few forks), receives only promotion pull requests from `develop`.
 - Branch from an up-to-date `develop`. Name the branch `<type>/<short-summary>`, for example `fix/token-refresh`, `feat/csv-export` or `docs/setup`.
 - `develop` must stay releasable. Nothing half-finished or known to be broken merges into it.
 
