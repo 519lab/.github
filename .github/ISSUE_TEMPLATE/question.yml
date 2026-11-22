@@ -1,0 +1,16 @@
+name: Question
+description: Ask how to use or set up the project.
+labels: [question]
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: What you're trying to do, and where you got stuck.
+    validations:
+      required: true
+  - type: textarea
+    id: tried
+    attributes:
+      label: What you tried
+      description: Commands, configuration or docs you've already looked at.
