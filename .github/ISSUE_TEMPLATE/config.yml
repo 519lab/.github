@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/519lab/.github/blob/develop/SECURITY.md
+    about: Report vulnerabilities privately, never in a public issue.
+  - name: Code of conduct concern
+    url: https://github.com/519lab/.github/blob/develop/CODE_OF_CONDUCT.md
+    about: Report a concern privately to conduct@519lab.com.
