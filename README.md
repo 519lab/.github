@@ -4,7 +4,7 @@ Organization-wide defaults for 519lab. Each file applies to every 519lab reposit
 
 A repository's own file replaces the default. For issue templates it's all or nothing: any valid form or `config.yml` in a repository's own `.github/ISSUE_TEMPLATE` turns the whole default set off there. Keep your own file only for project-specific content, such as setup steps in `CONTRIBUTING.md`, and link to the default for the shared rules.
 
-| File | Applies to |
+| File | Contents |
 | --- | --- |
 | `SECURITY.md` | Security policy: private vulnerability reporting, response timeline and disclosure |
 | `CODE_OF_CONDUCT.md` | Contributor Covenant 3.0; reports go to conduct@519lab.com |
